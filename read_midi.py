@@ -87,7 +87,7 @@ class Read_midi(object):
         self.get_time_file()
         T_pr = self.__T_file
         # Pitch dimension
-        N_pr = 128
+        N_pr = 88
         pianoroll = {}
 
         def add_note_to_pr(note_off, notes_on, pr):
@@ -103,6 +103,7 @@ class Read_midi(object):
 
             # Add note to the pr
             pitch, velocity, time_on = match_list[0][1]
+            pitch = pitch - 21
             pr[time_on:time_off, pitch] = velocity
             # Remove the note from notes_on
             ind_match = match_list[0][0]
@@ -140,23 +141,27 @@ class Read_midi(object):
                 if message.type == 'note_on':
                     # Get pitch
                     pitch = message.note
-                    # Get velocity
-                    velocity = message.velocity
-                    if velocity > 0:
-                        notes_on.append((pitch, velocity, time_pr))
-                    elif velocity == 0:
-                        add_note_to_pr((pitch, velocity, time_pr), notes_on, pr)
+                    if 0 <= pitch - 21 < 88:
+                        # Get velocity
+                        velocity = message.velocity
+                        if velocity > 0:
+                            notes_on.append((pitch, velocity, time_pr))
+                        elif velocity == 0:
+                            add_note_to_pr((pitch, velocity, time_pr), notes_on, pr)
+                            
                 # Note off
                 elif message.type == 'note_off':
                     pitch = message.note
-                    velocity = message.velocity
-                    add_note_to_pr((pitch, velocity, time_pr), notes_on, pr)
+                    if 0 <= pitch - 21 < 88:
+                        velocity = message.velocity
+                        add_note_to_pr((pitch, velocity, time_pr), notes_on, pr)
 
             # We deal with discrete values ranged between 0 and 127
             #     -> convert to int
             pr = pr.astype(np.int16)
             if np.sum(np.sum(pr)) > 0:
                 name = unidecode(track.name)
+                name = f'Track_{i}'  # 修改了Track Name，使得每个轨道独立，按轨道顺序读取；轨道顺序依然是0 1 2 3
                 name = name.rstrip('\x00')
                 if name == u'':
                     name = 'unnamed' + str(counter_unnamed_track)
@@ -170,10 +175,26 @@ class Read_midi(object):
 
 
 if __name__ == '__main__':
-    filepath = "/Users/leo/Recherche/GitHub_Aciditeam/database/Orchestration/LOP_database_06_09_17/bouliane/0/Brahms_Symph4_iv(1-33)_ORCH+REDUC+piano_orch.mid"
+    filepath = "/data/xyth/Dataset/stringquad_midi/aasesdeath/aasesdeath.MID"
     aaa = Read_midi(filepath, 4).read_file()
-    import utils
-    bbb = utils.dict_to_matrix(aaa)
-    import pdb; pdb.set_trace()
-    import write_midi
-    write_midi.write_midi(aaa, 4, "test.mid", 80)
+    print(aaa)
+    # print(aaa['Violin'].shape)
+
+    import matplotlib.pyplot as plt
+
+    # 假设 aaa 是从 Read_midi 类的 read_file 方法返回的钢琴卷字典
+    # pianoroll_violin = aaa['Violoncello']
+    pianoroll_violin = aaa[list(aaa.keys())[3]]  # 这里按轨道顺序读取，0 1 2 3代表小1 2，中，大
+
+    # 绘制钢琴卷
+    plt.imshow(pianoroll_violin.T, aspect='auto', origin='lower', cmap='hot')
+    plt.colorbar()  # 显示颜色条
+    plt.xlabel('Time')
+    plt.ylabel('Pitch')
+    plt.title('Pianoroll for "Violin" Track')
+
+    # 保存图像到文件，你可以指定文件格式和分辨率
+    plt.savefig('cello_pianoroll.png', format='png', dpi=300)
+
+    # 关闭图形，释放资源
+    plt.close()
