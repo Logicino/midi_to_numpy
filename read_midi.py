@@ -8,6 +8,7 @@ import numpy as np
 #######
 # Pianorolls dims are  :   TIME  *  PITCH
 
+## TODO: 修改时间单位从ticks到指定的frames
 
 class Read_midi(object):
     def __init__(self, song_path, quantization):
@@ -21,6 +22,8 @@ class Read_midi(object):
         ## Private misc
         self.__num_ticks = None
         self.__T_file = None
+        self.__beats_per_second = None
+        
 
     @property
     def quantization(self):
@@ -50,6 +53,7 @@ class Read_midi(object):
                 time = float(message.time)
                 tick_counter += time
             num_ticks = max(num_ticks, tick_counter)
+        #print("num_ticks", num_ticks)
         self.__num_ticks = num_ticks
 
     def get_pitch_range(self):
@@ -69,17 +73,37 @@ class Read_midi(object):
     def get_time_file(self):
         # Get the time dimension for a pianoroll given a certain quantization
         mid = MidiFile(self.__song_path)
-        # Tick per beat
-        ticks_per_beat = mid.ticks_per_beat
+        # Beat per minute
+        tempo = None
+        for msg in mid.tracks[0]:
+            if msg.type == 'set_tempo':
+                tempo = msg.tempo
+                break
+        
+        if tempo is not None:
+            microseconds_per_beat = tempo
+            self.__beats_per_second = 1e6 / microseconds_per_beat
+            print(self.__beats_per_second)
+            # Tick per beat
+            ticks_per_beat = mid.ticks_per_beat
+            # ticks_per_second = ticks_per_beat * beats_per_second
+        else:
+            raise ValueError("Tempo information was not found in the MIDI file.")
+            
         # Total number of ticks
         self.get_total_num_tick()
+        
+        # 将以拍为单位转成以秒为单位
+        self.__quantization = 1. / self.__beats_per_second
+        
         # Dimensions of the pianoroll for each track
         self.__T_file = int((self.__num_ticks / ticks_per_beat) * self.__quantization)
         return self.__T_file
-
+        
     def read_file(self):
         # Read the midi file and return a dictionnary {track_name : pianoroll}
         mid = MidiFile(self.__song_path)
+
         # Tick per beat
         ticks_per_beat = mid.ticks_per_beat
 
@@ -118,20 +142,6 @@ class Read_midi(object):
             time_counter = 0
             notes_on = []
             for message in track:
-
-                ##########################################
-                ##########################################
-                ##########################################
-                # TODO : keep track of tempo information
-                # import re
-                # if re.search("tempo", message.type):
-                #     import pdb; pdb.set_trace()
-                ##########################################
-                ##########################################
-                ##########################################
-
-
-                # print message
                 # Time. Must be incremented, whether it is a note on/off or not
                 time = float(message.time)
                 time_counter += time / ticks_per_beat * self.__quantization
@@ -177,9 +187,10 @@ class Read_midi(object):
 if __name__ == '__main__':
     filepath = "/data/xyth/Dataset/stringquad_midi/aasesdeath/aasesdeath.MID"
     aaa = Read_midi(filepath, 4).read_file()
-    print(aaa)
+    #print(aaa)
     # print(aaa['Violin'].shape)
-
+    print(Read_midi(filepath, 1).get_time_file())
+    # 使用示例
     import matplotlib.pyplot as plt
 
     # 假设 aaa 是从 Read_midi 类的 read_file 方法返回的钢琴卷字典
@@ -194,7 +205,8 @@ if __name__ == '__main__':
     plt.title('Pianoroll for "Violin" Track')
 
     # 保存图像到文件，你可以指定文件格式和分辨率
-    plt.savefig('cello_pianoroll.png', format='png', dpi=300)
+    plt.savefig('cello_11_pianoroll.png', format='png', dpi=300)
 
     # 关闭图形，释放资源
     plt.close()
+    
